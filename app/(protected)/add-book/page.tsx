@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import CameraCapture from '@/components/CameraCapture';
 import BookSearchResults from '@/components/BookSearchResults';
@@ -33,6 +33,14 @@ export default function AddBookPage() {
   const [detectedISBN, setDetectedISBN] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Autofocus sul campo di ricerca quando si arriva allo step "search"
+  useEffect(() => {
+    if (step === 'search' && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [step]);
 
   const handleISBNDetected = async (isbn: string) => {
     console.log('ISBN rilevato:', isbn);
@@ -289,13 +297,45 @@ export default function AddBookPage() {
       {step === 'capture' && (
         <div>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Fotografa o carica un&apos;immagine del libro per estrarre automaticamente titolo o ISBN
+            Scegli come aggiungere il libro:
           </p>
           <CameraCapture
             onTextExtracted={handleTextExtracted}
             onISBNDetected={handleISBNDetected}
             debugMode={debugMode}
           />
+
+          {/* Manual Input Option */}
+          <div className="mt-4">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400">
+                  oppure
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setStep('search');
+                setSearchQuery('');
+              }}
+              className="mt-4 w-full flex items-center justify-center gap-3 px-6 py-4 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors group"
+            >
+              <span className="text-3xl">⌨️</span>
+              <div className="text-left">
+                <div className="font-semibold text-gray-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                  Inserimento manuale
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Digita titolo o ISBN
+                </div>
+              </div>
+            </button>
+          </div>
         </div>
       )}
 
@@ -329,17 +369,23 @@ export default function AddBookPage() {
               htmlFor="search"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
-              {detectedISBN ? 'ISBN rilevato (modifica se necessario)' : 'Cerca il libro (modifica se necessario)'}
+              {detectedISBN
+                ? 'ISBN rilevato (modifica se necessario)'
+                : extractedText
+                ? 'Cerca il libro (modifica se necessario)'
+                : 'Inserisci titolo o ISBN del libro'}
             </label>
             <div className="flex gap-2">
               <input
+                ref={searchInputRef}
                 type="text"
                 id="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Titolo del libro o ISBN..."
+                placeholder="Es: Il nome della rosa, oppure 9788845292613"
+                autoComplete="off"
               />
               <button
                 onClick={handleSearch}
