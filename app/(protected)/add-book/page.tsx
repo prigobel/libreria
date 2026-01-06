@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import CameraCapture from '@/components/CameraCapture';
 import BookSearchResults from '@/components/BookSearchResults';
-import { searchGoogleBooks } from '@/lib/api/googleBooks';
-import { searchBookByTitle } from '@/lib/api/openLibrary';
+import { searchGoogleBooks, getBookByISBN as getGoogleBookByISBN } from '@/lib/api/googleBooks';
+import { searchBookByTitle, getBookByISBN as getOpenLibraryBookByISBN } from '@/lib/api/openLibrary';
 import { createClient } from '@/lib/supabase/client';
 
 interface BookResult {
@@ -29,8 +29,74 @@ export default function AddBookPage() {
   const [searchResults, setSearchResults] = useState<BookResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
+  const [detectedISBN, setDetectedISBN] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  const handleISBNDetected = async (isbn: string) => {
+    console.log('ISBN rilevato:', isbn);
+    setDetectedISBN(isbn);
+    setSearchQuery(isbn);
+
+    // Cerca automaticamente per ISBN
+    setIsSearching(true);
+    setStep('results');
+
+    try {
+      // Cerca su entrambe le API usando l'ISBN
+      const [googleBook, openLibraryBook] = await Promise.all([
+        getGoogleBookByISBN(isbn),
+        getOpenLibraryBookByISBN(isbn),
+      ]);
+
+      const results: BookResult[] = [];
+
+      if (googleBook) {
+        results.push({
+          title: googleBook.title,
+          subtitle: googleBook.subtitle,
+          authors: googleBook.authors,
+          coverUrl: googleBook.coverUrl,
+          publisher: googleBook.publisher,
+          publishedDate: googleBook.publishedDate,
+          isbn13: googleBook.isbn13,
+          isbn10: googleBook.isbn10,
+          description: googleBook.description,
+          pageCount: googleBook.pageCount,
+          categories: googleBook.categories,
+        });
+      }
+
+      if (openLibraryBook && !results.some(r => r.title === openLibraryBook.title)) {
+        results.push({
+          title: openLibraryBook.title,
+          authors: openLibraryBook.authors,
+          coverUrl: openLibraryBook.coverUrl,
+          publisher: openLibraryBook.publisher,
+          publishedDate: openLibraryBook.publishYear?.toString(),
+          isbn13: isbn.length === 13 ? isbn : undefined,
+          isbn10: isbn.length === 10 ? isbn : undefined,
+          description: undefined,
+          pageCount: openLibraryBook.numberOfPages,
+          categories: openLibraryBook.subjects,
+        });
+      }
+
+      if (results.length === 0) {
+        alert('Nessun libro trovato con questo ISBN. Prova a cercare per titolo.');
+        setStep('search');
+      } else {
+        setSearchResults(results);
+      }
+    } catch (error) {
+      console.error('Errore durante la ricerca per ISBN:', error);
+      alert('Errore durante la ricerca. Riprova.');
+      setStep('search');
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const handleTextExtracted = (text: string) => {
     setExtractedText(text);
@@ -48,46 +114,91 @@ export default function AddBookPage() {
     setStep('results');
 
     try {
-      // Cerca su entrambe le API in parallelo
-      const [googleResults, openLibraryResults] = await Promise.all([
-        searchGoogleBooks(searchQuery),
-        searchBookByTitle(searchQuery),
-      ]);
+      // Controlla se la query sembra un ISBN
+      const cleanedQuery = searchQuery.replace(/[^0-9]/g, '');
+      const isISBN = cleanedQuery.length === 10 || cleanedQuery.length === 13;
 
-      // Combina i risultati, dando priorità a Google Books
-      const combined: BookResult[] = [
-        ...googleResults.map((book) => ({
-          title: book.title,
-          subtitle: book.subtitle,
-          authors: book.authors,
-          coverUrl: book.coverUrl,
-          publisher: book.publisher,
-          publishedDate: book.publishedDate,
-          isbn13: book.isbn13,
-          isbn10: book.isbn10,
-          description: book.description,
-          pageCount: book.pageCount,
-          categories: book.categories,
-        })),
-        ...openLibraryResults
-          .filter(
-            (olBook) =>
-              !googleResults.some(
-                (gBook) => gBook.title.toLowerCase() === olBook.title.toLowerCase()
-              )
-          )
-          .map((book) => ({
+      let combined: BookResult[] = [];
+
+      if (isISBN) {
+        // Cerca per ISBN
+        const [googleBook, openLibraryBook] = await Promise.all([
+          getGoogleBookByISBN(cleanedQuery),
+          getOpenLibraryBookByISBN(cleanedQuery),
+        ]);
+
+        if (googleBook) {
+          combined.push({
+            title: googleBook.title,
+            subtitle: googleBook.subtitle,
+            authors: googleBook.authors,
+            coverUrl: googleBook.coverUrl,
+            publisher: googleBook.publisher,
+            publishedDate: googleBook.publishedDate,
+            isbn13: googleBook.isbn13,
+            isbn10: googleBook.isbn10,
+            description: googleBook.description,
+            pageCount: googleBook.pageCount,
+            categories: googleBook.categories,
+          });
+        }
+
+        if (openLibraryBook && !combined.some(r => r.title === openLibraryBook.title)) {
+          combined.push({
+            title: openLibraryBook.title,
+            authors: openLibraryBook.authors,
+            coverUrl: openLibraryBook.coverUrl,
+            publisher: openLibraryBook.publisher,
+            publishedDate: openLibraryBook.publishYear?.toString(),
+            isbn13: cleanedQuery.length === 13 ? cleanedQuery : undefined,
+            isbn10: cleanedQuery.length === 10 ? cleanedQuery : undefined,
+            description: undefined,
+            pageCount: openLibraryBook.numberOfPages,
+            categories: openLibraryBook.subjects,
+          });
+        }
+      } else {
+        // Cerca per titolo
+        const [googleResults, openLibraryResults] = await Promise.all([
+          searchGoogleBooks(searchQuery),
+          searchBookByTitle(searchQuery),
+        ]);
+
+        // Combina i risultati, dando priorità a Google Books
+        combined = [
+          ...googleResults.map((book) => ({
             title: book.title,
+            subtitle: book.subtitle,
             authors: book.authors,
             coverUrl: book.coverUrl,
             publisher: book.publisher,
-            publishedDate: book.publishYear?.toString(),
-            isbn13: book.isbn,
-            description: undefined,
-            pageCount: book.numberOfPages,
-            categories: book.subjects,
+            publishedDate: book.publishedDate,
+            isbn13: book.isbn13,
+            isbn10: book.isbn10,
+            description: book.description,
+            pageCount: book.pageCount,
+            categories: book.categories,
           })),
-      ];
+          ...openLibraryResults
+            .filter(
+              (olBook) =>
+                !googleResults.some(
+                  (gBook) => gBook.title.toLowerCase() === olBook.title.toLowerCase()
+                )
+            )
+            .map((book) => ({
+              title: book.title,
+              authors: book.authors,
+              coverUrl: book.coverUrl,
+              publisher: book.publisher,
+              publishedDate: book.publishYear?.toString(),
+              isbn13: book.isbn,
+              description: undefined,
+              pageCount: book.numberOfPages,
+              categories: book.subjects,
+            })),
+        ];
+      }
 
       setSearchResults(combined);
     } catch (error) {
@@ -145,36 +256,80 @@ export default function AddBookPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">
-        Aggiungi un libro
-      </h1>
+      {/* Header con Debug Toggle */}
+      <div className="flex justify-between items-start mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          Aggiungi un libro
+        </h1>
+        <button
+          onClick={() => setDebugMode(!debugMode)}
+          className={`px-3 py-1 rounded-lg text-xs font-mono transition-colors ${
+            debugMode
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+          }`}
+          title="Attiva/Disattiva modalità debug"
+        >
+          {debugMode ? '🐛 DEBUG ON' : '🐛 Debug'}
+        </button>
+      </div>
+
+      {/* Debug Info Panel */}
+      {debugMode && (
+        <div className="mb-6 p-4 bg-gray-900 text-green-400 rounded-lg text-xs font-mono">
+          <div className="font-bold mb-2">📊 Debug Info:</div>
+          <div>Step: {step}</div>
+          <div>Query: {searchQuery || '(vuoto)'}</div>
+          <div>ISBN rilevato: {detectedISBN || 'nessuno'}</div>
+          <div>Risultati: {searchResults.length}</div>
+          <div>Testo estratto: {extractedText.length} caratteri</div>
+        </div>
+      )}
 
       {step === 'capture' && (
         <div>
           <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Fotografa il dorso del libro per estrarre automaticamente il titolo
+            Fotografa o carica un&apos;immagine del libro per estrarre automaticamente titolo o ISBN
           </p>
-          <CameraCapture onTextExtracted={handleTextExtracted} />
+          <CameraCapture
+            onTextExtracted={handleTextExtracted}
+            onISBNDetected={handleISBNDetected}
+            debugMode={debugMode}
+          />
         </div>
       )}
 
       {step === 'search' && (
         <div className="space-y-6">
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-              Testo estratto dalla foto:
-            </p>
-            <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm whitespace-pre-wrap mb-4">
-              {extractedText}
+          {detectedISBN && (
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="flex items-center gap-2 text-green-800 dark:text-green-300">
+                <span className="text-xl">✓</span>
+                <div>
+                  <div className="font-semibold">ISBN rilevato!</div>
+                  <div className="text-sm">{detectedISBN}</div>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+
+          {extractedText && !detectedISBN && (
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                Testo estratto dalla foto:
+              </p>
+              <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm whitespace-pre-wrap mb-4 max-h-32 overflow-y-auto">
+                {extractedText}
+              </div>
+            </div>
+          )}
 
           <div>
             <label
               htmlFor="search"
               className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
             >
-              Cerca il libro (modifica se necessario)
+              {detectedISBN ? 'ISBN rilevato (modifica se necessario)' : 'Cerca il libro (modifica se necessario)'}
             </label>
             <div className="flex gap-2">
               <input
@@ -184,7 +339,7 @@ export default function AddBookPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                placeholder="Titolo del libro..."
+                placeholder="Titolo del libro o ISBN..."
               />
               <button
                 onClick={handleSearch}
@@ -194,19 +349,34 @@ export default function AddBookPage() {
                 Cerca
               </button>
             </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              💡 Puoi cercare per titolo o inserire un ISBN manualmente
+            </p>
           </div>
 
           <button
-            onClick={() => setStep('capture')}
+            onClick={() => {
+              setStep('capture');
+              setDetectedISBN(null);
+              setExtractedText('');
+            }}
             className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline"
           >
-            ← Scatta un&apos;altra foto
+            ← Scatta/Carica un&apos;altra foto
           </button>
         </div>
       )}
 
       {step === 'results' && (
         <div className="space-y-6">
+          {detectedISBN && (
+            <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <div className="text-sm text-green-800 dark:text-green-300">
+                📊 Risultati per ISBN: <span className="font-mono font-semibold">{detectedISBN}</span>
+              </div>
+            </div>
+          )}
+
           <BookSearchResults
             results={searchResults}
             onSelect={handleSelectBook}
@@ -216,13 +386,20 @@ export default function AddBookPage() {
           {!isSearching && (
             <div className="flex gap-4">
               <button
-                onClick={() => setStep('search')}
+                onClick={() => {
+                  setStep('search');
+                  setDetectedISBN(null);
+                }}
                 className="flex-1 px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Modifica ricerca
               </button>
               <button
-                onClick={() => setStep('capture')}
+                onClick={() => {
+                  setStep('capture');
+                  setDetectedISBN(null);
+                  setExtractedText('');
+                }}
                 className="flex-1 px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Nuova foto

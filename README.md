@@ -4,14 +4,43 @@ Web app mobile-first per catalogare la tua libreria personale fotografando i dor
 
 ## ✨ Features
 
-- 📸 **Fotografia dorsi libri** tramite camera del cellulare
-- 🔍 **OCR automatico** per estrarre titoli (Tesseract.js)
-- 🌐 **Integrazione API** (Open Library + Google Books) per metadati automatici
-- 🔒 **Autenticazione Google** tramite Supabase Auth
-- 📖 **Catalogo personale** con ricerca e filtri
-- 📊 **Statistiche** lettura (letti, in lettura, da leggere)
-- 🎨 **UI responsive** mobile-first con Tailwind CSS
-- ⚡ **Ottimizzato** con Next.js 15 e Turbopack
+### 📸 Acquisizione Immagini
+- **Fotocamera** del cellulare per scattare foto
+- **Upload da galleria** per usare foto già esistenti
+- Supporto per dorsi, copertine e barcode
+
+### 🔍 Riconoscimento Intelligente
+- **OCR automatico** per estrarre titoli (Tesseract.js)
+- **Riconoscimento barcode ISBN** (ISBN-10 e ISBN-13) con ZXing
+- **3 modalità**: Auto (barcode + OCR), Solo barcode, Solo testo
+- Ricerca automatica per ISBN quando rilevato
+
+### 🌐 Integrazione e Dati
+- **API multiple** (Open Library + Google Books) per metadati automatici
+- Copertine ad alta qualità
+- Informazioni complete (autori, editore, descrizione, pagine, categorie)
+
+### 🔒 Sicurezza e Autenticazione
+- **Autenticazione Google** tramite Supabase Auth
+- Row Level Security (RLS) su tutti i dati
+- Storage privato per immagini
+
+### 📖 Gestione Libreria
+- **Catalogo personale** con griglia visuale
+- **Statistiche** lettura (totali, letti, in lettura, da leggere)
+- Dettaglio completo per ogni libro
+- Ricerca e filtri
+
+### 🐛 Developer Tools
+- **Modalità debug** con log in tempo reale
+- Console dettagliata per troubleshooting
+- Feedback visivo su ogni operazione
+
+### 🎨 UI/UX
+- Design **mobile-first** responsive
+- Dark mode supportato
+- Tailwind CSS per styling
+- Next.js 15 con Turbopack per performance ottimali
 
 ## 🚀 Setup Iniziale
 
@@ -183,6 +212,12 @@ https://tuo-dominio.vercel.app/auth/callback
 - **Client-side** (nessun server richiesto)
 - **Supporto italiano** (`ita` + `eng`)
 
+### ZXing (Barcode Scanner)
+- **Completamente gratuito**
+- **Client-side** (nessun server richiesto)
+- **Supporta ISBN-10, ISBN-13** e altri formati barcode
+- **Docs**: [github.com/zxing-js/library](https://github.com/zxing-js/library)
+
 ## 🔒 Sicurezza
 
 - ✅ Row Level Security (RLS) abilitato su tutte le tabelle
@@ -215,15 +250,31 @@ npx supabase gen types typescript --project-id tuo-project-ref > types/database.
 
 ## 📝 TODO Future
 
+### ✅ Completate
+- [x] **Barcode scanner per ISBN** (ISBN-10 e ISBN-13 con ZXing)
+- [x] **Upload da galleria** (oltre alla fotocamera)
+- [x] **Modalità debug** per troubleshooting
+- [x] **Riconoscimento multi-modalità** (Auto/Barcode/Testo)
+
+### 🔜 Da Fare
 - [ ] PWA (Progressive Web App) per installazione
-- [ ] Barcode scanner per ISBN
 - [ ] Modifica informazioni libro
 - [ ] Export CSV/PDF libreria
 - [ ] Condivisione liste pubbliche
 - [ ] Prestiti (tracking)
 - [ ] Statistiche avanzate
 - [ ] Raccomandazioni libri simili
+- [ ] Ricerca full-text nella libreria
+- [ ] Tag personalizzati
+- [ ] Ordinamento personalizzato (per autore, titolo, data)
 - [ ] Dark mode toggle
+
+## 📄 Documentazione
+
+- **[SETUP.md](SETUP.md)** - Guida setup passo-passo (15 minuti)
+- **[NUOVE_FUNZIONALITA.md](NUOVE_FUNZIONALITA.md)** - 🆕 Dettagli sulle nuove funzionalità (barcode, galleria, debug)
+- **[VERCEL_FIX.md](VERCEL_FIX.md)** - Fix per redirect a localhost dopo deploy
+- **[claude.md](claude.md)** - Pianificazione tecnica completa
 
 ## 📄 Licenza
 
